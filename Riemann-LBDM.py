@@ -8,9 +8,8 @@ import scipy.sparse as sp
 import numpy as np
 from scipy.linalg import eigh
 import math
-from myutils import *
-from stochastic_solvers import *
-from util.metrics import get_accuracyk
+from util.helper import setOptions
+from util.metrics import get_accuracy
 
 class RiemannianSolver: 
     '''Stochastic Riemannian Eigensolver

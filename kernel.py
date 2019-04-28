@@ -67,3 +67,12 @@ def laplacianize(W, regularizer=0):
     L = W * (D**(-.5))[:,None] * (D**(-.5))[None,:]
     return L, D
     
+def cumdist_matrix(matrix, axis=0):
+    """convert matrix to row-cumulative matrix, where each row is a cdf (last entry is 1)
+        good for numpy"""
+    if axis is 1:
+        cum_mat = np.array(list(itertools.accumulate(matrix)))
+    elif axis is 0: cum_mat = np.array(list(itertools.accumulate(matrix.transpose()))).transpose()
+    else: raise Exception('cumulative matrix only supports first 2 dimensions')
+    return cum_mat
+
