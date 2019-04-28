@@ -23,11 +23,13 @@ class RiemannianSolver:
             stepsize_type:
             stepsize_init: 
             stepsize_lambda:
+            checkperiod:
 
     '''
     def __init__(self, n_clusters, n_iters, **opt):
         self.n_clusters = n_clusters
         self.n_iters = n_iters
+
         self.batchsize = setOption(100, opt.get('batchsize'), lambda x: x > 0)
         self.stepsize_type = setOption('decay', opt.get('stepsize_type'), lambda x: type(x) is str and x in ['decay', 'fixed', 'hybrid', 'KHA/et'])
         self.stepsize_init = setOption(5, opt.get('stepsize_init'), lambda x: x >= 0)
@@ -39,6 +41,19 @@ class RiemannianSolver:
         
 
     def train(self, batch_feeder, X=None, recorder=None):
+        '''Iterate through data batches and update solution
+
+            Args:
+                batch_feeder: Iterator that yields next batch
+                X: if provided, initial solution
+                recorder: dict of functions that may be passed to record
+                statistics
+
+            Returns:
+                X: final solution
+                info: statistics
+
+        '''
         
         if X is None:
             X = self.init_X()
@@ -77,21 +92,33 @@ class RiemannianSolver:
 
     
     def get_update_operator(self):
+        '''Specify how the solution is updated
+
+        Returns:
+            update_operator: function that takes previous solution and returns
+            new solution
+        '''
           update_operator = optimize.Vanilla(stepsize_init=self.stepsize_init, stepsize_type=self.stepsize_type, stepsize_lambda=self.stepsize_lambda)
         return update_operator
 
 
     def init_X(self): 
+        '''Initialize a valid solution
+        '''
         X = np.random.randn(self.m, self.k)
         X, _ = np.linalg.qr(X, 'reduced')
         return X
     
             
     def get_cost(self, X):
+        '''Return cost to display
+        '''
         return self.vars['batch_cost']
     
     
     def get_gradient(self, X, A_batch):
+        '''Compute gradient from solution and batch matrix
+        '''
 
         batchsize, dim = A_batch.shape[0]
 
@@ -111,10 +138,14 @@ class RiemannianSolver:
 
 
 def get_affinity_matrix(data, landmarks, sigma):
+    '''Create RBF kernel matrix between data and landmarks
+    '''
     dist_mat = kernel.eudist(data, landmarks, squared=True)
     return np.exp(-dist_mat / (2 * sigma ** 2))
 
 def gather_mnist_labels(data_pat):
+    '''Gather all labels from data files
+    '''
     size = 100000
     labels = np.zeros(size*81, dtype=np.int)
     for i in range(81):
@@ -124,6 +155,9 @@ def gather_mnist_labels(data_pat):
 
 
 def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
+    '''A batch feeder is an iterator that yields new batch every call and opens
+    new file when needed. Also make sure that batch is always batchsize-large
+    '''
 
     for i in range(81):
         with load(data_pat.format(i)) as data:
@@ -152,16 +186,21 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
                     leftover_batch = A_batch
                     break
 
+
+
+
 n_chunks = 81
 chunksize = int(1e5)
 batchsize = 10000
 n_clusters = 10
 n_iters = int(n_chunks * chunksize / batchsize)
 data_pat = 'data_batch_{}.npz'
-landmarks = np.load(data_pat.format(81))
+
+landmarks = np.load(data_pat.format(81))['data']
+
 sigma = myutils.get_sigma(landmarks)
 
-labels = gather_mnist_labels(data_pat)
+true_labels = gather_mnist_labels(data_pat)
 
 batch_feeder = create_batch_feeder(data_pat, landmarks, sigma, batchsize)
 
@@ -169,13 +208,15 @@ rieman_opt = RiemannianSolver(n_clusters, n_iters, stepsize_init=0.1)
 
 X, info = rieman_opt.train(batch_feeder)
 
-
 rep_labels = KMeans(n_clusters=k, n_init=10, max_iter=10, n_jobs=-1, random_state=0).fit_predict(X)
 
 knn = np.argmax(C, axis=1)
 
 labels = np.zeros(n, dtype=np.int32)
+
 for i in range(n):
     labels[i] = rep_labels[knn[i]]
 
-return X, labels, info, C
+labels = get_y_preds(labels, true_labels, n_clusters)
+
+accuracy = (labels == true_labels).sum()
