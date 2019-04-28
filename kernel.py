@@ -2,8 +2,16 @@ import numpy as np
 import scipy.sparse as sp
 import warnings
 
-def eudist(A, B, sqrted=True):
+def eudist(A, B, squared=True):
     """do not square root if used for gaussian kernel"""
+    '''Fast method to create euclidean distance matrix between two sets of
+    vectors
+
+    Args:
+        A, B:
+        squared: whether the euclidean is squared
+    
+    '''
     n, n2 = A.shape
     m, m2 = B.shape
     assert(n2 == m2)
@@ -16,9 +24,9 @@ def eudist(A, B, sqrted=True):
     else: b = np.sum(B ** 2, 1).reshape([1,m])
     BB = np.repeat(b, n, 0)
     AB = 2 * A.dot(B.T)
-    if sqrted:
-        return (AA - AB + BB) ** 0.5
-    else: return AA - AB + BB
+    if squared:
+        return (AA - AB + BB)
+    else: return (AA - AB + BB) ** 0.5
 
 def gaussianize(fea, sigma=None, gamma=None):
     """\exp(-||x-y||^2 / (2*sigma^2)) or \exp(-gamma*||x-y||^2)"""
