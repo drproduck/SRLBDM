@@ -1,3 +1,4 @@
+import traceback
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_moons,make_circles, make_blobs
 from sklearn.cluster import KMeans
@@ -8,7 +9,7 @@ import scipy.sparse as sp
 import numpy as np
 from scipy.linalg import eigh
 import math
-from util.helper import setOptions
+from util.helper import setOption
 from util.metrics import get_accuracy
 
 class RiemannianSolver: 
@@ -25,7 +26,8 @@ class RiemannianSolver:
             checkperiod:
 
     '''
-    def __init__(self, n_clusters, n_iters, **opt):
+    def __init__(self, n_landmarks, n_clusters, n_iters, **opt):
+        self.n_landmarks = n_landmarks
         self.n_clusters = n_clusters
         self.n_iters = n_iters
 
@@ -57,7 +59,7 @@ class RiemannianSolver:
         if X is None:
             X = self.init_X()
         
-        update_operator = self.get_update_operator(X)
+        update_operator = self.get_update_operator()
         info = {'loss_hist': [], 'time': []}
         
 
@@ -69,6 +71,7 @@ class RiemannianSolver:
             try:
                 A_batch = next(batch_feeder)
             except:
+                traceback.print_exc()
                 break
 
             start = time()
@@ -97,14 +100,14 @@ class RiemannianSolver:
             update_operator: function that takes previous solution and returns
             new solution
         '''
-          update_operator = optimize.Vanilla(stepsize_init=self.stepsize_init, stepsize_type=self.stepsize_type, stepsize_lambda=self.stepsize_lambda)
+        update_operator = optimize.Vanilla(stepsize_init=self.stepsize_init, stepsize_type=self.stepsize_type, stepsize_lambda=self.stepsize_lambda)
         return update_operator
 
 
     def init_X(self): 
         '''Initialize a valid solution
         '''
-        X = np.random.randn(self.m, self.k)
+        X = np.random.randn(self.n_landmarks, self.n_clusters)
         X, _ = np.linalg.qr(X, 'reduced')
         return X
     
@@ -148,7 +151,7 @@ def gather_mnist_labels(data_pat):
     size = 100000
     labels = np.zeros(size*81, dtype=np.int)
     for i in range(81):
-        with load(data_pat.format(i)) as data:
+        with np.load(data_pat.format(i)) as data:
             labels[i*size : (i+1)*size] = data['label']
     return labels
 
@@ -159,7 +162,7 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
     '''
 
     for i in range(81):
-        with load(data_pat.format(i)) as data:
+        with np.load(data_pat.format(i)) as data:
             A = data['data']
             A = get_affinity_matrix(A, landmarks, sigma)
             n_samples = A.shape[0]
@@ -193,21 +196,25 @@ chunksize = int(1e5)
 batchsize = 10000
 n_clusters = 10
 n_iters = int(n_chunks * chunksize / batchsize)
-data_pat = 'data_batch_{}.npz'
+data_pat = '../mnist8m_dataset/data_batch_{}.npz'
 
 landmarks = np.load(data_pat.format(81))['data']
+n_landmarks = landmarks.shape[0]
 
-sigma = myutils.get_sigma(landmarks)
+print('Preprocessing..')
+sigma = kernel.get_sigma(landmarks)
 
 true_labels = gather_mnist_labels(data_pat)
 
 batch_feeder = create_batch_feeder(data_pat, landmarks, sigma, batchsize)
 
-rieman_opt = RiemannianSolver(n_clusters, n_iters, stepsize_init=0.1)
+rieman_opt = RiemannianSolver(n_landmarks, n_clusters, n_iters, stepsize_init=0.1)
 
+print('Training..')
 X, info = rieman_opt.train(batch_feeder)
 
-rep_labels = KMeans(n_clusters=k, n_init=10, max_iter=10, n_jobs=-1, random_state=0).fit_predict(X)
+print('Postprocessing..')
+rep_labels = KMeans(n_clusters=n_clusters, n_init=10, max_iter=10, n_jobs=-1, random_state=0).fit_predict(X)
 
 knn = np.argmax(C, axis=1)
 

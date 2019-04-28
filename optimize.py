@@ -1,5 +1,5 @@
 import numpy as np
-from myutils import *
+from util.helper import setOption
 
 
 class Vanilla:

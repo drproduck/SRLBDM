@@ -1,3 +1,5 @@
+from numpy import median
+from scipy.spatial.distance import pdist
 import numpy as np
 import scipy.sparse as sp
 import warnings
@@ -67,6 +69,7 @@ def laplacianize(W, regularizer=0):
     L = W * (D**(-.5))[:,None] * (D**(-.5))[None,:]
     return L, D
     
+
 def cumdist_matrix(matrix, axis=0):
     """convert matrix to row-cumulative matrix, where each row is a cdf (last entry is 1)
         good for numpy"""
@@ -76,3 +79,19 @@ def cumdist_matrix(matrix, axis=0):
     else: raise Exception('cumulative matrix only supports first 2 dimensions')
     return cum_mat
 
+
+def get_sigma(fea):
+    """Get the hyper-parameter sigma for RBF kernel of the dataset. 
+    It is the median of all distances"""
+    
+    if fea.shape[0] > 4000:
+        rperm = np.random.permutation(fea.shape[0])[:4000]
+        feasample = fea[rperm,:]
+        
+    else:
+        feasample = fea
+        
+    D = pdist(feasample, metric='euclidean')
+    
+    return median(D)
+    

@@ -1,23 +1,5 @@
-from scipy.spatial.distance import pdist
-from numpy.random import permutation
-from numpy import median
 import numpy as np
 
-def getSigma(fea):
-    """Get the hyper-parameter sigma for RBF kernel of the dataset. 
-    It is the median of all distances"""
-    
-    if fea.shape[0] > 4000:
-        rperm = permutation(fea.shape[0])[:4000]
-        feasample = fea[rperm,:]
-        
-    else:
-        feasample = fea
-        
-    D = pdist(feasample, metric='euclidean')
-    
-    return median(D)
-    
     
 def setOption(default, user_input, isValid):
     """Merge 2 options, prioritizing the second (credit to manopt)"""
