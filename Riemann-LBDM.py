@@ -2,7 +2,7 @@ import traceback
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_moons,make_circles, make_blobs
 from sklearn.cluster import KMeans
-import time
+from time import time
 import kernel
 import optimize
 import scipy.sparse as sp
@@ -76,15 +76,16 @@ class RiemannianSolver:
 
             start = time()
                 
+            t1 = time()
             G = self.get_gradient(X, A_batch)
             
             X = update_operator(X, -G)
 
-            if global_t > 0 and global_t % self.checkperiod == 0: 
+            if t % self.checkperiod == 0: 
                 time_elapsed = time() - start
-                info['loss_hist'].append(self.getCost(X))
+                info['loss_hist'].append(self.get_cost(X))
                 info['time'].append(t)
-                info['d2I'] = np.linalg.norm(X.T @ (self.vars['B'] * X) - np.eye(self.k), 'fro')
+                info['d2I'] = np.linalg.norm(X.T @ (self.vars['B'] * X) - np.eye(self.n_clusters), 'fro')
                 
                 print('{0:4d}         {1:10e}        {2:5f}'.format(info['time'][-1], info['loss_hist'][-1], time_elapsed))
                 
@@ -122,18 +123,18 @@ class RiemannianSolver:
         '''Compute gradient from solution and batch matrix
         '''
 
-        batchsize, dim = A_batch.shape[0]
+        batchsize, dim = A_batch.shape
 
         Dcol = A_batch.sum(axis=0).reshape(dim, 1)
         Drow = A_batch.sum(axis=1).reshape(batchsize, 1)
-        normalized_A = A / Drow**0.5
+        normalized_A = A_batch / Drow**0.5
         
         Dcol = Dcol / batchsize
         self.vars['B'] = Dcol
 
         G = normalized_A @ X # b * m * k
         self.vars['batch_cost'] = np.linalg.norm(G, 'fro')**2 / batchsize
-        G = normalized_A.T @ G - D2 * (X @ (G.T @ G)) # which multiplication order is fastest. (m * m) (m * k) (k * b) (b * k)
+        G = normalized_A.T @ G - Dcol * (X @ (G.T @ G)) # which multiplication order is fastest. (m * m) (m * k) (k * b) (b * k)
 
         return G
         
@@ -161,7 +162,9 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
     new file when needed. Also make sure that batch is always batchsize-large
     '''
 
+    leftover_batch = None
     for i in range(81):
+        print('Loading new data file..')
         with np.load(data_pat.format(i)) as data:
             A = data['data']
             A = get_affinity_matrix(A, landmarks, sigma)
@@ -193,7 +196,7 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
 
 n_chunks = 81
 chunksize = int(1e5)
-batchsize = 10000
+batchsize = 1000
 n_clusters = 10
 n_iters = int(n_chunks * chunksize / batchsize)
 data_pat = '../mnist8m_dataset/data_batch_{}.npz'
@@ -208,7 +211,7 @@ true_labels = gather_mnist_labels(data_pat)
 
 batch_feeder = create_batch_feeder(data_pat, landmarks, sigma, batchsize)
 
-rieman_opt = RiemannianSolver(n_landmarks, n_clusters, n_iters, stepsize_init=0.1)
+rieman_opt = RiemannianSolver(n_landmarks, n_clusters, n_iters, stepsize_init=0.001, checkperiod=5)
 
 print('Training..')
 X, info = rieman_opt.train(batch_feeder)
