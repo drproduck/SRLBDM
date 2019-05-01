@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import traceback
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_moons,make_circles, make_blobs
@@ -10,7 +12,8 @@ import numpy as np
 from scipy.linalg import eigh
 import math
 from util.helper import setOption
-from util.metrics import get_accuracy
+from util.metrics import get_y_preds
+
 
 class RiemannianSolver: 
     '''Stochastic Riemannian Eigensolver
@@ -55,6 +58,7 @@ class RiemannianSolver:
                 info: statistics
 
         '''
+        knn = []
         
         if X is None:
             X = self.init_X()
@@ -69,7 +73,8 @@ class RiemannianSolver:
         for t in range(1, n_iters+1):
 
             try:
-                A_batch = next(batch_feeder)
+                A_batch, knn_batch = next(batch_feeder)
+                knn += knn_batch
             except:
                 traceback.print_exc()
                 break
@@ -91,7 +96,7 @@ class RiemannianSolver:
                 
             self.vars = {} # clear all hidden variables here
 
-        return X, info
+        return X, knn, info
 
     
     def get_update_operator(self):
@@ -149,9 +154,10 @@ def get_affinity_matrix(data, landmarks, sigma):
 def gather_mnist_labels(data_pat):
     '''Gather all labels from data files
     '''
-    size = 100000
-    labels = np.zeros(size*81, dtype=np.int)
-    for i in range(81):
+    size = int(1e5)
+    n_chunks = 1
+    labels = np.zeros(size*n_chunks, dtype=np.int)
+    for i in range(n_chunks):
         with np.load(data_pat.format(i)) as data:
             labels[i*size : (i+1)*size] = data['label']
     return labels
@@ -163,30 +169,34 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
     '''
 
     leftover_batch = None
-    for i in range(81):
+    n_chunks = 1
+    for i in range(n_chunks):
         print('Loading new data file..')
         with np.load(data_pat.format(i)) as data:
             A = data['data']
-            A = get_affinity_matrix(A, landmarks, sigma)
+            # A = get_affinity_matrix(A, landmarks, sigma)
             n_samples = A.shape[0]
-            perm = np.random.permutation(n_samples)
+            perm = np.random.permutation(n_samples).tolist()
 
             offset = 0
             if leftover_batch is not None:
                 offset = batchsize - leftover_batch.shape[0]
-                A_batch = np.vstack((leftover_batch, A[0 : offset, :]))
+                A_batch_index = perm[0 : offset]
+                A_batch = get_affinity_matrix(A[A_batch_index, :], landmarks, sigma)
+                A_batch = np.vstack((leftover_batch, A_batch).flatten().tolist())
                 if A_batch.shape[0] == batchsize:
-                    yield A_batch
+                    yield (A_batch, np.argmax(A_batch, axis=1))
                 else: 
                     leftover_batch = A_batch
 
             j = offset
             while n_samples > j:
-                A_batch = A[j : j+batchsize, :]
+                A_batch_index = perm[j : j+batchsize]
+                A_batch = get_affinity_matrix(A[A_batch_index, :], landmarks, sigma)
                 if A_batch.shape[0] == batchsize:
                     leftover_batch = None
                     j = j + batchsize
-                    yield A_batch
+                    yield (A_batch, np.argmax(A_batch, axis=1).flatten().tolist())
                 else:
                     leftover_batch = A_batch
                     break
@@ -194,11 +204,12 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
 
 
 
-n_chunks = 81
+n_chunks = 1
 chunksize = int(1e5)
-batchsize = 1000
+n = n_chunks * chunksize
+batchsize = 10000
 n_clusters = 10
-n_iters = int(n_chunks * chunksize / batchsize)
+n_iters = int(n / batchsize)
 data_pat = '../mnist8m_dataset/data_batch_{}.npz'
 
 landmarks = np.load(data_pat.format(81))['data']
@@ -211,21 +222,25 @@ true_labels = gather_mnist_labels(data_pat)
 
 batch_feeder = create_batch_feeder(data_pat, landmarks, sigma, batchsize)
 
-rieman_opt = RiemannianSolver(n_landmarks, n_clusters, n_iters, stepsize_init=0.001, checkperiod=5)
+rieman_opt = RiemannianSolver(n_landmarks, n_clusters, n_iters, stepsize_init=0.0001, checkperiod=5)
 
 print('Training..')
-X, info = rieman_opt.train(batch_feeder)
+X, knn, info = rieman_opt.train(batch_feeder)
 
 print('Postprocessing..')
 rep_labels = KMeans(n_clusters=n_clusters, n_init=10, max_iter=10, n_jobs=-1, random_state=0).fit_predict(X)
-
-knn = np.argmax(C, axis=1)
 
 labels = np.zeros(n, dtype=np.int32)
 
 for i in range(n):
     labels[i] = rep_labels[knn[i]]
 
-labels = get_y_preds(labels, true_labels, n_clusters)
+labels, _ = get_y_preds(labels, true_labels, n_clusters)
 
-accuracy = (labels == true_labels).sum()
+# accuracy =(labels == true_labels).astype(int).sum()
+accuracy = 0
+for i in range(len(labels)):
+    accuracy += (labels[i] == true_labels[i])
+
+accuracy = accuracy / len(labels)
+print(accuracy)
