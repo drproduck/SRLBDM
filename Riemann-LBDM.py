@@ -154,12 +154,15 @@ def get_affinity_matrix(data, landmarks, sigma):
 def gather_mnist_labels(data_pat):
     '''Gather all labels from data files
     '''
-    size = int(1e5)
-    n_chunks = 1
-    labels = np.zeros(size*n_chunks, dtype=np.int)
+
+    global n_chunks
+    global chunksize
+
+    labels = np.zeros(n_chunks * chunksize, dtype=int)
+
     for i in range(n_chunks):
         with np.load(data_pat.format(i)) as data:
-            labels[i*size : (i+1)*size] = data['label']
+            labels[i*size : (i+1)*chunksize] = data['label']
     return labels
 
 
@@ -167,9 +170,10 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
     '''A batch feeder is an iterator that yields new batch every call and opens
     new file when needed. Also make sure that batch is always batchsize-large
     '''
+    global n_chunks
+    global chunksize
 
     leftover_batch = None
-    n_chunks = 1
     for i in range(n_chunks):
         print('Loading new data file..')
         with np.load(data_pat.format(i)) as data:
@@ -183,9 +187,9 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
                 offset = batchsize - leftover_batch.shape[0]
                 A_batch_index = perm[0 : offset]
                 A_batch = get_affinity_matrix(A[A_batch_index, :], landmarks, sigma)
-                A_batch = np.vstack((leftover_batch, A_batch).flatten().tolist())
+                A_batch = np.vstack((leftover_batch, A_batch))
                 if A_batch.shape[0] == batchsize:
-                    yield (A_batch, np.argmax(A_batch, axis=1))
+                    yield (A_batch, np.argmax(A_batch, axis=1).flatten().tolist())
                 else: 
                     leftover_batch = A_batch
 
@@ -207,7 +211,7 @@ def create_batch_feeder(data_pat, landmarks, sigma, batchsize):
 n_chunks = 1
 chunksize = int(1e5)
 n = n_chunks * chunksize
-batchsize = 10000
+batchsize = 1000
 n_clusters = 10
 n_iters = int(n / batchsize)
 data_pat = '../mnist8m_dataset/data_batch_{}.npz'
