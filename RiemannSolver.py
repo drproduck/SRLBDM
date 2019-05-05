@@ -70,7 +70,7 @@ class solver:
         print('Iter                 Loss            Time')
     
 
-        for t in range(1, n_iters+1):
+        for t in range(1, self.n_iters+1):
 
             try:
                 A_batch, knn_batch = next(batch_feeder)
