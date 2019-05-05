@@ -36,7 +36,7 @@ def gaussianize(fea, sigma=None, gamma=None):
     if (sigma is not None) and (gamma is not None): raise Error('please use either sigma or gamma but not both')
     if sigma is None and gamma is None: sigma = 1
         
-    w = eudist(fea, fea, False)
+    w = eudist(fea, fea, True)
     if sigma is not None:
         w = np.exp(-w / (2 * sigma ** 2))
     elif gamma is not None:
