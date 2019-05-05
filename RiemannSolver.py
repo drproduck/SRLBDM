@@ -142,3 +142,4 @@ class solver:
         G = normalized_A.T @ G - Dcol * (X @ (G.T @ G)) # which multiplication order is fastest. (m * m) (m * k) (k * b) (b * k)
 
         return G
+        
