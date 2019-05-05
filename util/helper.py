@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.io import loadmat
 
     
 def setOption(default, user_input, isValid):
@@ -20,6 +21,9 @@ def mergeOptions(opt1, opt2):
             
     return opt2
 
+def load_matlab(file):
+    d = loadmat(file, mat_dtype=True)
+    return d['fea'], d['gnd']
     
 # def stableNormalize(X, check_zero=True):
 #     """stable L2 normalization of a vector, or the last dimension of a numpy array. In-place
